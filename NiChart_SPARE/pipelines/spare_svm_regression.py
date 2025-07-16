@@ -10,6 +10,7 @@ import pandas as pd
 import numpy as np
 from sklearn.svm import LinearSVR, SVR
 from sklearn.model_selection import GridSearchCV, RepeatedKFold
+from sklearn.linear_model import LinearRegression
 
 from ..data_analysis import (
 	report_regression_metrics
@@ -21,7 +22,6 @@ from ..util import (
 
 from ..svm import (
     get_svm_hyperparameter_grids,
-    correct_linearsvr_bias
 )
 
 # Accepts dataframe and target_column as input along with other parameters to perform an svc training
@@ -38,8 +38,12 @@ def train_svr_model(
     verbose: int = 1,
     **svc_params
     ):
+
+    svc_params = {'C':1.0,'epsilon':0.1} # for debugging
+
     # Items to return
     model = None
+    bias_terms = None
     grid_search = None
     cv_scores = None
     best_cv_model = None
@@ -98,19 +102,22 @@ def train_svr_model(
 
     else:
         print(f"Hyperparameter selection skipped...")
-        # # Use default parameters
-        # svc_params.setdefault('random_state', random_state)
 
     # Perform another CV using the best parameter if get_cv_score parameter is True
+    cv_info = {}
     cv_scores = {}
+    cv_indexes = {}
     if get_cv_scores:
         print(f"Initiating {cv_fold}-fold CV")
         
         cv = RepeatedKFold(n_splits=cv_fold, 
-                           n_repeats=1, 
+                           n_repeats=1,
                            random_state=random_state)
         
         for i, (train_index, test_index) in enumerate(cv.split(X, y)):
+            # Save indexes per fold
+            cv_indexes["Fold_%d" % (i % cv.n_repeats)] = {'train_index':train_index,'test_index':test_index}
+
             X_train, X_test = X.loc[train_index], X.loc[test_index]
             y_train, y_test = y.loc[train_index], y.loc[test_index]
             
@@ -118,15 +125,20 @@ def train_svr_model(
             if kernel == 'linear_fast':
                 model = LinearSVR(**base_params)
                 model.fit(X_train, y_train)
-                if bias_correction:
-                    print("Correcting bias")
-                    model = correct_linearsvr_bias(model,X,y)
             else:
                 model = SVR(**base_params)
                 model.fit(X_train, y_train)
             
             # Predict
+            y_pred_train = model.predict(X_train)
             y_pred = model.predict(X_test)
+            # correct for bias
+            if bias_correction:
+                print("Correcting bias")
+                reg = LinearRegression().fit(y_pred_train.reshape(-1, 1), y_train)
+                a, b = reg.intercept_, reg.coef_[0]
+                y_pred = (y_pred - a) / b
+
             # Get validation metrics
             cv_metric = report_regression_metrics(y_test, y_pred)
             print(f"Iteration {i+1} Repeat {(i+1)//cv_fold} Fold {i % cv.n_repeats} metrics: {cv_metric}")
@@ -144,18 +156,24 @@ def train_svr_model(
         if kernel == 'linear_fast':
             model = LinearSVR(**base_params)
             model.fit(X, y)
-            if bias_correction:
-                print("Correcting bias")
-                model = correct_linearsvr_bias(model,X,y)
         else:
             model = SVR(**base_params)
             model.fit(X, y)
-    
+        
+        if bias_correction:
+                print("Correcting bias")
+                y_pred = model.predict(X)
+                reg = LinearRegression().fit(y_pred.reshape(-1, 1), y)
+                bias_terms = (reg.intercept_, reg.coef_[0])
+
     else:
         if tune_hyperparameters:
             model = grid_search.best_estimator_
         elif get_cv_scores:
             model = best_cv_model
 
+    cv_info['CV_Indexes'] = cv_indexes
+    cv_info['CV_Scores'] = cv_scores
+
     # Return model and the CV scores
-    return model, hyperparameter_tuning, cv_scores
+    return model, bias_terms, hyperparameter_tuning, cv_info

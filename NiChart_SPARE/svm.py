@@ -85,39 +85,6 @@ def get_svm_hyperparameter_grids():
     }
 
 
-def correct_linearsvr_bias(svr_model, X_train, y_train):
-    """
-    Corrects the regularization bias of a trained SVR model by adjusting its intercept.
-    Use LinearRegressor for the delta y calculation.
-
-    The regularization in SVR can introduce a systematic bias in the predictions.
-    This function corrects this bias by calculating the mean of the residuals
-    on the training data and adding it to the model's intercept.
-
-    Args:
-        svr_model: A trained scikit-learn SVR model.
-        X_train: The training data (features).
-        y_train: The training data (target values).
-
-    Returns:
-        A new SVR model object with the corrected intercept.
-    """
-    # Correction model
-    corrector = LinearRegression(fit_intercept=True)
-    corrector.fit(X_train,y_train)
-    # Predict on the training data using the original model
-    y_pred_train = corrector.predict(X_train)
-    # Calculate the residuals (difference between actual and predicted values)
-    residuals = y_train - y_pred_train
-    # Calculate the mean of the residuals, which is the bias
-    bias = np.mean(residuals)
-    # Create a new SVR model to avoid modifying the original one
-    corrected_model = svr_model
-    # Correct the intercept of the new model by adding the bias
-    corrected_model.intercept_ += bias
-
-    return corrected_model
-
 
 def train_svm_model(input_file, 
 					model_path, 
@@ -125,6 +92,7 @@ def train_svm_model(input_file,
 					target_column, 
 					kernel, 
 					tune_hyperparameters, 
+                    cross_validate,
                     cv_fold,
                     class_balancing,
 					train_whole_set, 
@@ -133,6 +101,7 @@ def train_svm_model(input_file,
                     verbose=1):
     
     model = None
+    bias = 0
     meta_data={}
     preprocessor={}
     # hyperparameter_tuning={}
@@ -151,23 +120,11 @@ def train_svm_model(input_file,
         raise ValueError(f"Target column '{target_column}' not found. Available columns: {list(df.columns)}")
     print(f"Success.")
 
-    # Create Metadata for model saving
-    meta_data = get_metadata(spare_type, 
-                             "0.1.0",
-                             "SVM", 
-                             kernel, 
-                             target_column,
-                             df, 
-                             tune_hyperparameters, 
-                             cv_fold, 
-                             class_balancing, 
-                             train_whole_set)
-
     # Get pipeline module
     pipeline_module = get_pipeline_module(spare_type)
    
     # Initialize variables
-    feature_encoder, feature_scaler, target_encoder = (None, None, None)
+    feature_encoder, feature_scaler = (None, None)
 
     # Regression tasks
     if spare_type in ['RG','BA']:
@@ -184,13 +141,13 @@ def train_svm_model(input_file,
 
         # Training
         if kernel.lower() in ['linear_fast','linear','poly', 'rbf', 'sigmoid']:
-            model, ht, cv = pipeline_module.train_svr_model(
+            model, bias, ht, cv = pipeline_module.train_svr_model(
                 X,
                 y,
                 kernel=kernel,
                 tune_hyperparameters=tune_hyperparameters,
                 cv_fold=cv_fold,
-                get_cv_scores=True,
+                get_cv_scores=cross_validate,
                 train_whole_set=train_whole_set,
                 bias_correction=bias_correction,
                 verbose=verbose
@@ -226,7 +183,7 @@ def train_svm_model(input_file,
                 tune_hyperparameters=tune_hyperparameters,
                 cv_fold=cv_fold,
                 class_balancing=class_balancing,
-                get_cv_scores=True,
+                get_cv_scores=cross_validate,
                 train_whole_set=train_whole_set
                 )
         else:
@@ -237,10 +194,21 @@ def train_svm_model(input_file,
         sys.exit(1)
 
     if model != None and model_path != None:
+            # Create Metadata for model saving
+            meta_data = get_metadata(spare_type, 
+                                    "0.1.0",
+                                    "SVM", 
+                                    kernel, 
+                                    target_column,
+                                    df, 
+                                    tune_hyperparameters, 
+                                    cv_fold, 
+                                    class_balancing, 
+                                    train_whole_set)
             # Create info
             preprocessor = get_preprocessors(feature_encoder, feature_scaler)
             # Save model
-            save_svm_model(model, 
+            save_svm_model({'model':model, 'bias':bias}, 
                            meta_data, 
                            preprocessor, 
                            ht, 
@@ -286,11 +254,14 @@ def infer_svm_model(input_file,
     
     # Load model
     print("Loading trained model...")
-    model, meta_data, preprocessor, _, _ = load_svm_model(model_path) # TBF
+    model_info, meta_data, preprocessor, _, _ = load_svm_model(model_path) # TBF
+
+    model = model_info['model']
+    bias_terms = model_info['bias']
 
     # Load data
     print("Loading prediction data...")
-    df = load_csv_data(input_file, drop_columns=None)
+    df = load_csv_data(input_file, drop_columns=drop_columns)
 
     # Check all columns exist in the input file
     for nf in meta_data['training_data_description']['feature_names']:
@@ -299,7 +270,12 @@ def infer_svm_model(input_file,
         else:
             print(f"Checked:\t{nf}")
 
-    df = df[[key_variable, meta_data['training_data_description']['target_column']] + meta_data['training_data_description']['feature_names']]
+    # subset for only needed columns
+    if meta_data['training_data_description']['target_column'] in df.columns.tolist():
+        df = df[[key_variable, meta_data['training_data_description']['target_column']] + meta_data['training_data_description']['feature_names']]
+    else:
+        df = df[[key_variable] + meta_data['training_data_description']['feature_names']]
+
 
     print(f"Preprocessing the input...{df.shape}")
 
@@ -328,7 +304,12 @@ def infer_svm_model(input_file,
         print(f"Input preprocessing completed. Feature shape: {X.shape}")
     
     # Get prediction
-    predictions = model.predict(X.astype(float))
+    predictions = model.predict(X)
+
+    # Correct for bias
+    if bias_terms != None:
+        print("Correcting bias")
+        predictions = (predictions - bias_terms[0]) / bias_terms[1]
     
     # Create output dataframe
     output_df = pd.DataFrame()

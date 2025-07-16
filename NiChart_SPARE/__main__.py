@@ -88,6 +88,7 @@ def main():
     train_whole_set = args.train_whole.lower() == 'true'
     class_balancing = args.class_balancing.lower() == 'true'
     bias_correction = args.bias_correction.lower() == 'true'
+    cross_validate = int(args.cv_fold) != 0
     
     # Parse columns to drop
     if ',' in args.ignore_column:
@@ -113,6 +114,7 @@ def main():
                     tune_hyperparameters=tune_hyperparameters,
                     cv_fold=args.cv_fold,
                     class_balancing=class_balancing,
+                    cross_validate=cross_validate,
                     train_whole_set=train_whole_set,
                     bias_correction=bias_correction,
                     drop_columns=ignore_columns + [args.key_variable],

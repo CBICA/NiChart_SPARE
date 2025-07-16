@@ -63,11 +63,9 @@ def preprocess_regression_data(
     target_column: str,
     encode_categorical_features: bool = True,
     scale_features: bool = True,
-    # scale_target: bool = False,
     for_training: bool = True,
     feature_encoder: LabelEncoder = None, # for inference
     feature_scaler: StandardScaler = None, # for inference
-    # target_scaler: StandardScaler = None # for inference
 ):
     X, y = (None, None)
     
@@ -77,6 +75,7 @@ def preprocess_regression_data(
         df = df.dropna(subset=[target_column]) # Remove rows with missing target values
         
         # Separate features and target
+        print(f"Dropped target column: {target_column}")
         X = df.drop(columns=[target_column])
         y = df[target_column]
 
@@ -90,15 +89,11 @@ def preprocess_regression_data(
             feature_scaler = StandardScaler()
             X = pd.DataFrame(feature_scaler.fit_transform(X), columns=X.columns, index=X.index)
 
-        # # Scale target values if they're numeric and scaling is requested
-        # if scale_target and pd.api.types.is_numeric_dtype(y):
-        #     target_scaler = StandardScaler()
-        #     y = target_scaler.fit_transform(y)
-
     else:
         """Preprocess data for inference: handle missing values and encode categorical features."""
         # Check if ground truth is provided in the df, if so, drop it.
         if target_column in df.columns:
+            print(f"Dropped target column: {target_column}")
             X = df.drop([target_column],axis=1)
             y = df[target_column]
         else:
