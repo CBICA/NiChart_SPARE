@@ -32,22 +32,22 @@ def get_svm_hyperparameter_grids():
     """Get hyperparameter grids for different kernels and model types."""
     classification_grids = {
         'linear_fast': {
-            "C": expspace([-9, 5])
+            "C": expspace([-4, 1])
         },
         'linear': {
-            "C": expspace([-9, 5])
+            "C": expspace([-4, 1])
         },
         'rbf': {
-            "C": expspace([-9, 5]),
+            "C": expspace([-4, 1]),
             "gamma": ['scale', 'auto']
         },
         'poly': {
-            "C": expspace([-9, 5]),
+            "C": expspace([-4, 1]),
             'degree': [2, 3],
             'gamma': ['scale', 'auto']
         },
         'sigmoid': {
-            "C": expspace([-9, 5]),
+            "C": expspace([-4, 1]),
             'gamma': ['scale', 'auto'],
             'coef0': [-1, 0, 1]
         }

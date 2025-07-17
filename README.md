@@ -15,16 +15,16 @@ Implementation of SPARE scores calculation from Brain ROI Volumes ([NiChart_DLMU
 
 ## Installation
 
-##### ~~Using PyPi~~ (Currently unsupported, TBA)
-```bash
-pip install NiChart_SPARE
-```
-
 ##### From GitHub
 ```bash
 git clone https://github.com/CBICA/NiChart_SPARE.git
 cd NiChart_SPARE
 pip install -e .
+```
+
+##### ~~Using PyPi~~ (Currently unsupported, TBA)
+```bash
+pip install NiChart_SPARE
 ```
 
 ### Example Usage
@@ -54,6 +54,7 @@ NiChart_SPARE -a trainer \
               -sk linear \
               -ht False \
               -tw True \
+              -bc True \
               -cf 5 \
               -mo output_model.joblib \
               -kv MRID \
