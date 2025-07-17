@@ -27,7 +27,7 @@ def get_version():
 setup(
     name="NiChart_SPARE",
     version=get_version(),
-    author="Kyunglok Baik",
+    author="Kyunglok Baik, Gareth Harman",
     author_email="software@cbica.upenn.edu",
     description="Complete pipelines for SPARE scores training and analysis from Brain ROI Volumes",
     long_description=read_readme(),
