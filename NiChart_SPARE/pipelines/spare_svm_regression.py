@@ -34,7 +34,7 @@ def train_svr_model(
     get_cv_scores: bool = True,
     train_whole_set: bool = True,
     random_state: int = 42, # for replication
-    bias_correction: bool = False,
+    bias_correction: int = 2,
     verbose: int = 1,
     **svc_params
     ):
@@ -131,16 +131,26 @@ def train_svr_model(
             
             # Predict
             y_pred_train = model.predict(X_train)
-            y_pred = model.predict(X_test)
+            y_pred_test = model.predict(X_test)
             # correct for bias
-            if bias_correction:
-                print("Correcting bias")
-                reg = LinearRegression().fit(y_pred_train.reshape(-1, 1), y_train)
-                a, b = reg.intercept_, reg.coef_[0]
-                y_pred = (y_pred - a) / b
+            if bias_correction != None:
+                cv_metric = report_regression_metrics(y_test, y_pred_test)
+                print(f"Pre-correction: Iteration {i+1} Repeat {(i+1)//cv_fold} Fold {i % cv.n_repeats} metrics: {cv_metric}")
+                if bias_correction==1:
+                    print("Correcting bias (residual approach)")
+                    residuals = y_train - y_pred_train
+                    lin_fit = LinearRegression().fit(y_train.to_frame(), residuals)
+                    m, c = lin_fit.coef_[0], lin_fit.intercept_
+                    y_pred_test = y_pred_test - lin_fit.predict(y_pred_test.reshape(-1,1))
 
+                elif bias_correction==2:
+                    print("Correcting bias (Cole et al.)")
+                    reg = LinearRegression().fit(y_train.values.reshape(-1, 1), y_pred_train)
+                    m, c = reg.coef_[0], reg.intercept_
+                    y_pred_test = (y_pred_test - c) / m
+                
             # Get validation metrics
-            cv_metric = report_regression_metrics(y_test, y_pred)
+            cv_metric = report_regression_metrics(y_test, y_pred_test)
             print(f"Iteration {i+1} Repeat {(i+1)//cv_fold} Fold {i % cv.n_repeats} metrics: {cv_metric}")
             # Save the scores
             cv_scores["Fold_%d" % (i % cv.n_repeats)] = cv_metric
@@ -160,11 +170,22 @@ def train_svr_model(
             model = SVR(**base_params)
             model.fit(X, y)
         
-        if bias_correction:
-                print("Correcting bias")
-                y_pred = model.predict(X)
-                reg = LinearRegression().fit(y_pred.reshape(-1, 1), y)
-                bias_terms = (reg.intercept_, reg.coef_[0])
+        if bias_correction==1:
+            print("Correcting bias (residual approach)")
+            y_pred = model.predict(X)
+            residuals = y - y_pred
+            lin_fit = LinearRegression().fit(y.to_frame(), residuals)
+            bias_terms = {'model':lin_fit,
+                          'method':bias_correction,
+                          'intercept':lin_fit.intercept_, 
+                          'coef': lin_fit.coef_[0]}
+        elif bias_correction==2:
+            print("Correcting bias (Cole et al.)")
+            reg = LinearRegression().fit(y_train.values.reshape(-1, 1), y_pred_train)
+            bias_terms = {'model':reg,
+                          'method':bias_correction,
+                          'intercept':lin_fit.intercept_, 
+                          'coef': lin_fit.coef_[0]}
 
     else:
         if tune_hyperparameters:

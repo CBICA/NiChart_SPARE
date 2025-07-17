@@ -101,7 +101,6 @@ def train_svm_model(input_file,
                     verbose=1):
     
     model = None
-    bias = 0
     meta_data={}
     preprocessor={}
     # hyperparameter_tuning={}
@@ -309,7 +308,10 @@ def infer_svm_model(input_file,
     # Correct for bias
     if bias_terms != None:
         print("Correcting bias")
-        predictions = (predictions - bias_terms[0]) / bias_terms[1]
+        if bias_terms['method'] == 1:
+            predictions = predictions - bias_terms['model'].predict(predictions.reshape(-1,1))
+        elif bias_terms['method'] == 2:
+            predictions = (predictions - bias_terms['intercept']) / bias_terms['coef']
     
     # Create output dataframe
     output_df = pd.DataFrame()
