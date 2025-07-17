@@ -184,8 +184,8 @@ def train_svr_model(
             reg = LinearRegression().fit(y_train.values.reshape(-1, 1), y_pred_train)
             bias_terms = {'model':reg,
                           'method':bias_correction,
-                          'intercept':lin_fit.intercept_, 
-                          'coef': lin_fit.coef_[0]}
+                          'intercept':reg.intercept_, 
+                          'coef': reg.coef_[0]}
 
     else:
         if tune_hyperparameters:

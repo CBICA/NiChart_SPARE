@@ -307,10 +307,11 @@ def infer_svm_model(input_file,
 
     # Correct for bias
     if bias_terms != None:
-        print("Correcting bias")
         if bias_terms['method'] == 1:
+            print("Correcting bias (residual approach)")
             predictions = predictions - bias_terms['model'].predict(predictions.reshape(-1,1))
         elif bias_terms['method'] == 2:
+            print("Correcting bias (Cole et al.)")
             predictions = (predictions - bias_terms['intercept']) / bias_terms['coef']
     
     # Create output dataframe
