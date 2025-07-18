@@ -113,17 +113,20 @@ def train_svc_model(
         print(f"Initiating {cv_fold}-fold CV")
         repeat=3
         for r in range(repeat):
-            cv_scores["Repeat_%d"%r] = {'scores':{},'decision_function':{},'test_reference':{},'test_prediction':{}}
+            cv_scores["Repeat_%d"%r] = {'scores':{},
+                                        'cv_results':{}}
         cv = RepeatedStratifiedKFold(n_splits=cv_fold, 
                                      n_repeats=repeat, 
                                      random_state=random_state)
-        
+
         for i, (train_index, test_index) in enumerate(cv.split(X, y)):
+            df_cv_result_per_fold = pd.DataFrame()
+            
             X_train, X_test = X.loc[train_index], X.loc[test_index]
             y_train, y_test = y.loc[train_index], y.loc[test_index]
 
-            cv_scores['Repeat_%d' % ((i)//cv_fold)]['test_reference']["Fold_%d" % (i % cv_fold)] = y_test
-            
+            df_cv_result_per_fold['test_reference'] = y_test
+
             # Train model with current parameters
             if kernel == 'linear_fast':
                 model = LinearSVC(**base_params)
@@ -133,15 +136,20 @@ def train_svc_model(
             model.fit(X_train, y_train)
             
             # Get decision function
-            cv_scores['Repeat_%d' % ((i)//cv_fold)]['decision_function']["Fold_%d" % (i % cv_fold)] = model.decision_function(X_test)
+            df_cv_result_per_fold['test_decision_function'] = model.decision_function(X_test)
             # Predict
             y_pred = model.predict(X_test)
-            cv_scores['Repeat_%d' % ((i)//cv_fold)]['test_prediction']["Fold_%d" % (i % cv_fold)] = y_pred
+            df_cv_result_per_fold['test_prediction'] = y_pred
+            # Add fold info
+            df_cv_result_per_fold['fold'] = i % cv_fold
             # Get validation metrics
             cv_metric = report_classification_metrics(y_test, y_pred)
             print(f"Iteration {i} Repeat {(i)//cv_fold} Fold {i % cv_fold} metrics: {cv_metric}")
             # Save the scores
             cv_scores['Repeat_%d' % ((i)//cv_fold)]['scores']["Fold_%d" % (i % cv_fold)] = cv_metric
+            cv_scores['Repeat_%d' % ((i)//cv_fold)]['cv_results']["Fold_%d" % (i % cv_fold)] = df_cv_result_per_fold
+            # cv_scores['Repeat_%d' % ((i)//cv_fold)]['cv_results']
+
             # Update the best performing model based off of ROC-AUC
             if cv_metric['ROC-AUC'] > best_cv_score:
                 best_cv_model = model
