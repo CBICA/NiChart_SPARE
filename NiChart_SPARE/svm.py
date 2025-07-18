@@ -54,26 +54,26 @@ def get_svm_hyperparameter_grids():
     }
     regression_grids = {
         'linear_fast': {
-            'C':  expspace([-9, 5]),
+            'C':  expspace([-4, 1]),
             'epsilon': [0.01, 0.1, 0.2]
         },
         'linear': {
-            'C':  expspace([-9, 5]),
+            'C':  expspace([-4, 1]),
             'epsilon': [0.01, 0.1, 0.2]
         },
         'rbf': {
-            'C':  expspace([-9, 5]),
+            'C':  expspace([-4, 1]),
             'gamma': ['scale', 'auto'],
             'epsilon': [0.01, 0.1, 0.2]
         },
         'poly': {
-            'C':  expspace([-9, 5]),
+            'C':  expspace([-4, 1]),
             'degree': [2, 3],
             'gamma': ['scale', 'auto'],
             'epsilon': [0.01, 0.1]
         },
         'sigmoid': {
-            'C':  expspace([-9, 5]),
+            'C':  expspace([-4, 1]),
             'gamma': ['scale', 'auto'],
             'epsilon': [0.01, 0.1]
         }
@@ -101,6 +101,7 @@ def train_svm_model(input_file,
                     verbose=1):
     
     model = None
+    bias = None
     meta_data={}
     preprocessor={}
     # hyperparameter_tuning={}
