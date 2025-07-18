@@ -277,11 +277,14 @@ def ba_effect_analysis(df_ba = None,
 ####################################
 ###### Model level analysis ########
 ####################################
+
+
 def get_cv_scores_from_model(model,
                              repeat_label=0):
     df_cv_scores = pd.DataFrame(model['cross_validation']['Repeat_%d'%repeat_label]['scores'])
     df_cv_scores['Average'] = df_cv_scores.mean(axis=1)
     return df_cv_scores
+
 
 def get_cv_results_from_model(model,
                               repeat_label=0):
@@ -292,15 +295,15 @@ import matplotlib.pyplot as plt
 
 def plot_roc_auc(model,
                  ax=None,
-                 repeat_label=0):
+                 repeat_label=0,
+                 title='Receiver Operating Characteristic (ROC) Curve'):
     """
     Generates and displays an ROC-AUC curve from a NiChart_SPARE CL model.
 
     Args:
         model: The NiChart_SPARE model file to fetch the scores.
     """
-    #df = pd.concat(model['cross_validation']['Repeat_%d'%repeat_label]['cv_results'].values(),axis=0).sort_index()
-    df = get_cv_results_from_model(model)
+    df = pd.concat(model['cross_validation']['Repeat_%d'%repeat_label]['cv_results'].values(),axis=0).sort_index()
 
     # --- Input Validation ---
     required_columns = {'test_reference', 'test_prediction', 'test_decision_function'}
@@ -334,7 +337,7 @@ def plot_roc_auc(model,
         plt.ylim([0.0, 1.05])
         plt.xlabel('FPR', fontsize=14)
         plt.ylabel('TPR', fontsize=14)
-        plt.title('Receiver Operating Characteristic (ROC) Curve', fontsize=16)
+        plt.title(title +' Repeat %d' % repeat_label, fontsize=16)
         plt.legend(loc="lower right", fontsize=12)
         plt.grid(True)
          # Display the plot
@@ -349,8 +352,7 @@ def plot_roc_auc(model,
         ax.set_ylim([0.0, 1.05])
         ax.set_xlabel('FPR', fontsize=14)
         ax.set_ylabel('TPR', fontsize=14)
-        ax.set_title('Receiver Operating Characteristic (ROC) Curve Repeat %d' % repeat_label, fontsize=16)
+        ax.set_title(title +' Repeat %d' % repeat_label, fontsize=16)
         ax.legend(loc="lower right", fontsize=12)
         ax.grid(True)
     
-   
