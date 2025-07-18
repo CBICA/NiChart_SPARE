@@ -49,10 +49,12 @@ def train_svc_model(
         print(f"Training model with LinearSVC...")
         base_params = {'fit_intercept':True,
                        'random_state': random_state,
-                       'verbose' : verbose > 1}
+                       'verbose' : verbose > 1
+                       }
     else:
         print(f"Training model with default SVC with {kernel} kernel...")
-        base_params = {'kernel': kernel, 
+        base_params = {'kernel': kernel,
+                       'probability':True, 
                        'random_state': random_state,
                        'verbose' : verbose > 1}
     
@@ -109,14 +111,18 @@ def train_svc_model(
     cv_scores = {}
     if get_cv_scores:
         print(f"Initiating {cv_fold}-fold CV")
-        
+        repeat=3
+        for r in range(repeat):
+            cv_scores["Repeat_%d"%r] = {'scores':{},'decision_function':{},'test_reference':{},'test_prediction':{}}
         cv = RepeatedStratifiedKFold(n_splits=cv_fold, 
-                                     n_repeats=1, 
+                                     n_repeats=repeat, 
                                      random_state=random_state)
         
         for i, (train_index, test_index) in enumerate(cv.split(X, y)):
             X_train, X_test = X.loc[train_index], X.loc[test_index]
             y_train, y_test = y.loc[train_index], y.loc[test_index]
+
+            cv_scores['Repeat_%d' % ((i)//cv_fold)]['test_reference']["Fold_%d" % (i % cv_fold)] = y_test
             
             # Train model with current parameters
             if kernel == 'linear_fast':
@@ -126,13 +132,16 @@ def train_svc_model(
             
             model.fit(X_train, y_train)
             
+            # Get decision function
+            cv_scores['Repeat_%d' % ((i)//cv_fold)]['decision_function']["Fold_%d" % (i % cv_fold)] = model.decision_function(X_test)
             # Predict
             y_pred = model.predict(X_test)
+            cv_scores['Repeat_%d' % ((i)//cv_fold)]['test_prediction']["Fold_%d" % (i % cv_fold)] = y_pred
             # Get validation metrics
             cv_metric = report_classification_metrics(y_test, y_pred)
-            print(f"Iteration {i+1} Repeat {(i+1)//cv_fold} Fold {i % cv.n_repeats} metrics: {cv_metric}")
+            print(f"Iteration {i} Repeat {(i)//cv_fold} Fold {i % cv_fold} metrics: {cv_metric}")
             # Save the scores
-            cv_scores["Fold_%d" % (i % cv.n_repeats)] = cv_metric
+            cv_scores['Repeat_%d' % ((i)//cv_fold)]['scores']["Fold_%d" % (i % cv_fold)] = cv_metric
             # Update the best performing model based off of ROC-AUC
             if cv_metric['ROC-AUC'] > best_cv_score:
                 best_cv_model = model

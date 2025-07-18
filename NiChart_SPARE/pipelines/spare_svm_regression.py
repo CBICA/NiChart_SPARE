@@ -151,7 +151,7 @@ def train_svr_model(
                 
             # Get validation metrics
             cv_metric = report_regression_metrics(y_test, y_pred_test)
-            print(f"Iteration {i+1} Repeat {(i+1)//cv_fold} Fold {i % cv.n_repeats} metrics: {cv_metric}")
+            print(f"Iteration {i} Repeat {(i)//cv_fold} Fold {i % cv_fold} metrics: {cv_metric}")
             # Save the scores
             cv_scores["Fold_%d" % (i % cv.n_repeats)] = cv_metric
             # Update the best performing model based off of ROC-AUC
