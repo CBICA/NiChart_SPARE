@@ -135,15 +135,16 @@ def train_svc_model(
             
             model.fit(X_train, y_train)
             
+            mdf = model.decision_function(X_test)
             # Get decision function
-            df_cv_result_per_fold['test_decision_function'] = model.decision_function(X_test)
+            df_cv_result_per_fold['test_decision_function'] = mdf
             # Predict
             y_pred = model.predict(X_test)
             df_cv_result_per_fold['test_prediction'] = y_pred
             # Add fold info
             df_cv_result_per_fold['fold'] = i % cv_fold
             # Get validation metrics
-            cv_metric = report_classification_metrics(y_test, y_pred)
+            cv_metric = report_classification_metrics(y_test, y_pred, mdf)
             print(f"Iteration {i} Repeat {(i)//cv_fold} Fold {i % cv_fold} metrics: {cv_metric}")
             # Save the scores
             cv_scores['Repeat_%d' % ((i)//cv_fold)]['scores']["Fold_%d" % (i % cv_fold)] = cv_metric

@@ -30,7 +30,7 @@ def report_regression_metrics(y_true, y_pred):
     }
 
 
-def report_classification_metrics(y_true, y_pred):
+def report_classification_metrics(y_true, y_pred, y_decision_function):
     """Report classification metrics: ROC-AUC, Accuracy, Balanced Accuracy, Sensitivity, Specificity, Precision, Recall, F1."""
     y_pred = np.asarray(y_pred)
     y_true = np.asarray(y_true)
@@ -61,9 +61,9 @@ def report_classification_metrics(y_true, y_pred):
     # ROC-AUC
     try:
         if n_classes == 2:
-            roc_auc = roc_auc_score(y_true, y_pred)
+            roc_auc = roc_auc_score(y_true, y_decision_function)
         else:
-            roc_auc = roc_auc_score(y_true, y_pred, multi_class='ovr')
+            roc_auc = roc_auc_score(y_true, y_decision_function, multi_class='ovr')
     except Exception:
         roc_auc = None
 
@@ -272,3 +272,85 @@ def ba_effect_analysis(df_ba = None,
         plt.savefig(output_visualization_path)
     else:
         plt.show()
+
+
+####################################
+###### Model level analysis ########
+####################################
+def get_cv_scores_from_model(model,
+                             repeat_label=0):
+    df_cv_scores = pd.DataFrame(model['cross_validation']['Repeat_%d'%repeat_label]['scores'])
+    df_cv_scores['Average'] = df_cv_scores.mean(axis=1)
+    return df_cv_scores
+
+def get_cv_results_from_model(model,
+                              repeat_label=0):
+    return pd.concat(model['cross_validation']['Repeat_%d'%repeat_label]['cv_results'].values(),axis=0).sort_index()
+
+from sklearn.metrics import roc_curve, auc
+import matplotlib.pyplot as plt
+
+def plot_roc_auc(model,
+                 ax=None,
+                 repeat_label=0):
+    """
+    Generates and displays an ROC-AUC curve from a NiChart_SPARE CL model.
+
+    Args:
+        model: The NiChart_SPARE model file to fetch the scores.
+    """
+    #df = pd.concat(model['cross_validation']['Repeat_%d'%repeat_label]['cv_results'].values(),axis=0).sort_index()
+    df = get_cv_results_from_model(model)
+
+    # --- Input Validation ---
+    required_columns = {'test_reference', 'test_prediction', 'test_decision_function'}
+    if not required_columns.issubset(df.columns):
+        raise ValueError(f"Input DataFrame must contain the columns: {', '.join(required_columns)}")
+
+    # Extract the necessary columns from the DataFrame
+    y_true = df['test_reference']
+    y_score = df['test_decision_function']
+
+    # --- ROC Curve Calculation ---
+    # Compute the false positive rate (FPR), true positive rate (TPR), and thresholds
+    # The roc_curve function returns these values which are essential for plotting.
+    fpr, tpr, _ = roc_curve(y_true, y_score)
+
+    # --- AUC Calculation ---
+    # Compute the Area Under the Curve (AUC) using the calculated FPR and TPR.
+    # This value gives a single measure of the model's performance.
+    roc_auc = auc(fpr, tpr)
+
+    # --- Plotting the ROC Curve ---
+    if ax == None:
+        plt.style.use('seaborn-v0_8-whitegrid') # Use a nice style for the plot
+        plt.figure(figsize=(10, 8))
+        # Plot the ROC curve
+        plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
+        # Plot the "chance" line, which represents a random classifier
+        plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+        # --- Formatting the Plot ---
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('FPR', fontsize=14)
+        plt.ylabel('TPR', fontsize=14)
+        plt.title('Receiver Operating Characteristic (ROC) Curve', fontsize=16)
+        plt.legend(loc="lower right", fontsize=12)
+        plt.grid(True)
+         # Display the plot
+        plt.show()
+    else:
+        # Plot the ROC curve
+        ax.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
+        # Plot the "chance" line, which represents a random classifier
+        ax.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+        # --- Formatting the Plot ---
+        ax.set_xlim([0.0, 1.0])
+        ax.set_ylim([0.0, 1.05])
+        ax.set_xlabel('FPR', fontsize=14)
+        ax.set_ylabel('TPR', fontsize=14)
+        ax.set_title('Receiver Operating Characteristic (ROC) Curve Repeat %d' % repeat_label, fontsize=16)
+        ax.legend(loc="lower right", fontsize=12)
+        ax.grid(True)
+    
+   
