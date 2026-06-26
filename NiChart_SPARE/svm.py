@@ -198,43 +198,43 @@ def train_svm_model(input_file,
         else:
             print(f"Unsupported SVM kernel entry. Please select among: linear, poly, rbf, sigmoid.")
 
-    # for SPARE-CVMs
-    elif spare_type in ['CVM','HT','T2B','SM','BMI']:
-        # Input validation
-        print(f"Validating input...")
-        validate_dataframe(df, target_column)
-        print(f"Success.")
-        # Preprocess the input df, split into X, y
-        print(f"Preprocessing the input with Age, Sex, ICV residualization...{df.shape}")
-        from .data_prep import apply_cvm_residualization
-        df = apply_cvm_residualization(df, 
-                                       age_col=age_col,
-                                       sex_col=sex_col,
-                                       dlicv_col=icv_col)
-        df = df.drop([age_col,sex_col,icv_col],axis=1)
-        print(f"Keeping just the residualized features: {df.drop([target_column],axis=1).columns}")
-        X, y, feature_encoder, feature_scaler = preprocess_classification_data(
-            df, 
-            target_column = target_column, 
-            encode_categorical_features=True,
-            scale_features=True,
-            for_training=True)
-        print(f"Input preprocessing completed.")
+    # # for SPARE-CVMs
+    # elif spare_type in ['CVM','HT','T2B','SM','BMI']:
+    #     # Input validation
+    #     print(f"Validating input...")
+    #     validate_dataframe(df, target_column)
+    #     print(f"Success.")
+    #     # Preprocess the input df, split into X, y
+    #     print(f"Preprocessing the input with Age, Sex, ICV residualization...{df.shape}")
+    #     from .data_prep import apply_cvm_residualization
+    #     df = apply_cvm_residualization(df, 
+    #                                    age_col=age_col,
+    #                                    sex_col=sex_col,
+    #                                    dlicv_col=icv_col)
+    #     df = df.drop([age_col,sex_col,icv_col],axis=1)
+    #     print(f"Keeping just the residualized features: {df.drop([target_column],axis=1).columns}")
+    #     X, y, feature_encoder, feature_scaler = preprocess_classification_data(
+    #         df, 
+    #         target_column = target_column, 
+    #         encode_categorical_features=True,
+    #         scale_features=True,
+    #         for_training=True)
+    #     print(f"Input preprocessing completed.")
 
-        # Training
-        if kernel.lower() in ['linear_fast','linear','poly', 'rbf', 'sigmoid']:
-            model, ht, cv = pipeline_module.train_svc_model(
-                X,
-                y,
-                kernel=kernel,
-                tune_hyperparameters=tune_hyperparameters,
-                cv_fold=cv_fold,
-                class_balancing=class_balancing,
-                get_cv_scores=cross_validate,
-                train_whole_set=train_whole_set
-                )
-        else:
-            print(f"Unsupported SVM kernel entry. Please select among: linear, poly, rbf, sigmoid.")
+    #     # Training
+    #     if kernel.lower() in ['linear_fast','linear','poly', 'rbf', 'sigmoid']:
+    #         model, ht, cv = pipeline_module.train_svc_model(
+    #             X,
+    #             y,
+    #             kernel=kernel,
+    #             tune_hyperparameters=tune_hyperparameters,
+    #             cv_fold=cv_fold,
+    #             class_balancing=class_balancing,
+    #             get_cv_scores=cross_validate,
+    #             train_whole_set=train_whole_set
+    #             )
+    #     else:
+    #         print(f"Unsupported SVM kernel entry. Please select among: linear, poly, rbf, sigmoid.")
         
     else:
         print(f"{spare_type} is not supported.")
@@ -273,7 +273,7 @@ def save_svm_model(
     preprocessor: dict, # encoder & scaler
     hyperparameter_tuning:dict,  #  Search strategy, param grid, best params, scoring
     cross_validation:dict, # strategy, n_splits, scores (each fold)
-    filepath: str # path to save the model
+    save_path: str # path to save the model
 ) -> None:
     model_data = {
         'model': model,
@@ -282,7 +282,7 @@ def save_svm_model(
         'hyperparameter_tuning':hyperparameter_tuning,
         'cross_validation':cross_validation
     }
-    joblib.dump(model_data, filepath)
+    joblib.dump(model_data, save_path)
 
 
 # Load a trained model and components from a file
@@ -300,10 +300,11 @@ def infer_svm_model(input_file,
                     age_col='Age',
                     sex_col='Sex_M',
                     drop_columns=None,
-                    append_spare_tag=None):
+                    append_spare_tag=None,
+                    cv=None):
     """Make predictions using trained model"""
     
-    # Load model
+    # Load the main model
     print("Loading trained model...")
     model_info, meta_data, preprocessor, _, _ = load_svm_model(model_path) # TBF
 
@@ -347,9 +348,9 @@ def infer_svm_model(input_file,
     print(f"Preprocessing the input...{df.shape}")
     print(df.columns.tolist())
 
-    # Perform ICV correction across all ROIs if asked
+    # Perform ICV correction across all ROIs if asked (To-add)
 
-    # Perform Age, Sex, ICV residualization if asked
+    # Perform Age, Sex, ICV residualization if asked (To-add)
 
     # Regression task
     if spare_type in ['RG','BA']:
@@ -375,23 +376,23 @@ def infer_svm_model(input_file,
             )
         print(f"Input preprocessing completed. Feature shape: {X.shape}")
     
-    # CVMs
-    elif spare_type in ['CVM','HT','T2B','SM','BMI']:
-        print("Processing CVM")
-        from .data_prep import apply_cvm_residualization
-        df = apply_cvm_residualization(df, 
-                                       age_col=age_col,
-                                       sex_col='Sex',
-                                       dlicv_col=icv_col)
-        df = df.drop([age_col,'Sex',icv_col],axis=1)
-        #print(f"Keeping just the residualized features: {df.drop([target_column],axis=1).columns}")
-        X, y, _, _ = preprocess_classification_data( 
-            df = df.drop([key_variable],axis=1),
-            target_column = meta_data['training_data_description']['target_column'],
-            feature_encoder = preprocessor['feature_encoder'],
-            feature_scaler= preprocessor['feature_scaler'],
-            for_training=False
-            )
+    # # CVMs
+    # elif spare_type in ['CVM','HT','T2B','SM','BMI']:
+    #     print("Processing CVM")
+    #     from .data_prep import apply_cvm_residualization
+    #     df = apply_cvm_residualization(df, 
+    #                                    age_col=age_col,
+    #                                    sex_col='Sex',
+    #                                    dlicv_col=icv_col)
+    #     df = df.drop([age_col,'Sex',icv_col],axis=1)
+    #     #print(f"Keeping just the residualized features: {df.drop([target_column],axis=1).columns}")
+    #     X, y, _, _ = preprocess_classification_data( 
+    #         df = df.drop([key_variable],axis=1),
+    #         target_column = meta_data['training_data_description']['target_column'],
+    #         feature_encoder = preprocessor['feature_encoder'],
+    #         feature_scaler= preprocessor['feature_scaler'],
+    #         for_training=False
+    #         )
     # Get prediction
     predictions = model.predict(X)
     # Correct for bias
@@ -411,27 +412,30 @@ def infer_svm_model(input_file,
     if spare_type in ['CL','AD']:
         output_df['SPARE_'+spare_type+'_decision_function'] = model.decision_function(X)
 
+    # when cv was performed, return all results generated using models per fold
+
     if meta_data['training_data_description']['target_column'] in df.columns:
         output_df['GT_'+spare_type] = y
 
-    if append_spare_tag is not None:
-        mapping = {}
+    mapping = {}
+    # if append_spare_tag is not None:
+    #     
 
-        # SPARE_CL  -> SPARE_<tag>
-        if "SPARE_CL" in df.columns:
-            mapping["SPARE_CL"] = f"SPARE_{tag}"
+    #     # SPARE_CL  -> SPARE_<tag>
+    #     if "SPARE_CL" in df.columns:
+    #         mapping["SPARE_CL"] = f"SPARE_{tag}"
 
-        # SPARE_RG  -> SPARE_<tag>
-        if "SPARE_RG" in df.columns:
-            mapping["SPARE_RG"] = f"SPARE_{tag}"
+    #     # SPARE_RG  -> SPARE_<tag>
+    #     if "SPARE_RG" in df.columns:
+    #         mapping["SPARE_RG"] = f"SPARE_{tag}"
 
-        # SPARE_CL_decision_function -> SPARE_<tag>_decision_function
-        if "SPARE_CL_decision_function" in df.columns:
-            mapping["SPARE_CL_decision_function"] = f"SPARE_{tag}_decision_function"
+    #     # SPARE_CL_decision_function -> SPARE_<tag>_decision_function
+    #     if "SPARE_CL_decision_function" in df.columns:
+    #         mapping["SPARE_CL_decision_function"] = f"SPARE_{tag}_decision_function"
 
-        # GT_RG -> <tag>_GT_RG
-        if "GT_RG" in df.columns:
-            mapping["GT_RG"] = f"{tag}_GT_RG"
+    #     # GT_RG -> <tag>_GT_RG
+    #     if "GT_RG" in df.columns:
+    #         mapping["GT_RG"] = f"{tag}_GT_RG"
 
     output_df = output_df.rename(columns=mapping)
     

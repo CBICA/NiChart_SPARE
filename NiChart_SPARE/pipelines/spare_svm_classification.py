@@ -40,7 +40,7 @@ def train_svc_model(
     # Items to return
     model = None
     grid_search = None
-    cv_scores = None
+    cv_results = None
     best_cv_model = None
     best_cv_score = 0
     
@@ -49,7 +49,8 @@ def train_svc_model(
         print(f"Training model with LinearSVC...")
         base_params = {'fit_intercept':True,
                        'random_state': random_state,
-                       'verbose' : verbose > 1
+                       'verbose' : verbose > 1,
+                       'max_iter' : 1000000
                        }
     else:
         print(f"Training model with default SVC with {kernel} kernel...")
@@ -86,7 +87,7 @@ def train_svc_model(
             base_model,
             param_grids,
             cv=cv,
-            scoring='balanced_accuracy' if class_balancing == True else 'accuracy',
+            scoring='average_precision' if class_balancing == True else 'balanced_accuracy',
             n_jobs=-1,
             verbose=verbose
         )
@@ -108,53 +109,72 @@ def train_svc_model(
         svc_params.setdefault('random_state', random_state)
 
     # Perform another CV using the best parameter if get_cv_score parameter is True
-    cv_scores = {}
     if get_cv_scores:
-        print(f"Initiating {cv_fold}-fold CV")
         repeat=3
-        for r in range(repeat):
-            cv_scores["Repeat_%d"%r] = {'scores':{},
-                                        'cv_results':{}}
+        print(f"Initiating {repeat} repeated {cv_fold}-fold CV")
+
         cv = RepeatedStratifiedKFold(n_splits=cv_fold, 
                                      n_repeats=repeat, 
                                      random_state=random_state)
 
+        # Define the schema
+        cv_results = dict.fromkeys(["Repeat_%d"%r for r in range(repeat)],
+                                   dict.fromkeys(["Fold_%d" % i for i in range(cv_fold)]))
+
         for i, (train_index, test_index) in enumerate(cv.split(X, y)):
-            df_cv_result_per_fold = pd.DataFrame()
-            
+            cv_result={} # model, 
+
+            rep_num=str(i//cv.cvargs['n_splits'])
+            fold_num=str(i%cv.cvargs['n_splits'])
+
+            print(f"CV iteration {i} (Repeat: {rep_num} Fold: {fold_num})")
+
+            # CV tr/ts sets
             X_train, X_test = X.loc[train_index], X.loc[test_index]
             y_train, y_test = y.loc[train_index], y.loc[test_index]
 
-            df_cv_result_per_fold['test_reference'] = y_test
-
             # Train model with current parameters
+            model=None
             if kernel == 'linear_fast':
                 model = LinearSVC(**base_params)
             else:
                 model = SVC(**base_params)
-            
-            model.fit(X_train, y_train)
-            
-            mdf = model.decision_function(X_test)
-            # Get decision function
-            df_cv_result_per_fold['test_decision_function'] = mdf
+            model.fit(X_train, y_train.values)
+
+            cv_result['model']=model
             # Predict
             y_pred = model.predict(X_test)
+            # Get decision function
+            mdf = model.decision_function(X_test)
+
+            # Archieve the testing outcomes
+            df_cv_result_per_fold = pd.DataFrame()
+            df_cv_result_per_fold['test_reference'] = y_test
             df_cv_result_per_fold['test_prediction'] = y_pred
-            # Add fold info
-            df_cv_result_per_fold['fold'] = i % cv_fold
+            df_cv_result_per_fold['test_decision_function'] = mdf
+            df_cv_result_per_fold['fold'] = int(fold_num)
+
+            cv_result['cv_validation']=df_cv_result_per_fold
+            
             # Get validation metrics
             cv_metric = report_classification_metrics(y_test, y_pred, mdf)
-            print(f"Iteration {i} Repeat {(i)//cv_fold} Fold {i % cv_fold} metrics: {cv_metric}")
-            # Save the scores
-            cv_scores['Repeat_%d' % ((i)//cv_fold)]['scores']["Fold_%d" % (i % cv_fold)] = cv_metric
-            cv_scores['Repeat_%d' % ((i)//cv_fold)]['cv_results']["Fold_%d" % (i % cv_fold)] = df_cv_result_per_fold
-            # cv_scores['Repeat_%d' % ((i)//cv_fold)]['cv_results']
+            # print the cv metric
+            print(f"CV Validation: {cv_metric}")
+            # save
+            cv_result['cv_scores']=cv_metric
+            
 
-            # Update the best performing model based off of ROC-AUC
-            if cv_metric['ROC-AUC'] > best_cv_score:
-                best_cv_model = model
-                best_cv_score = cv_metric['ROC-AUC']
+            cv_results[f"Repeat_{rep_num}"][f"Fold_{fold_num}"]=cv_result
+
+            # # Update the best performing model based off of ROC-AUC
+            # if 'ROC-AUC' in cv_metric.keys():
+            #     if cv_metric['ROC-AUC'] > best_cv_score:
+            #         best_cv_model = model
+            #         best_cv_score = cv_metric['ROC-AUC']
+            # elif 'Accuracy' in cv_metric.keys():
+            #     if cv_metric['Accuracy'] > best_cv_score:
+            #         best_cv_model = model
+            #         best_cv_score = cv_metric['Accuracy']
             
 
     # Train model using the best parameter and whole set
@@ -173,5 +193,5 @@ def train_svc_model(
             model = best_cv_model
     
     # Return model and the CV scores
-    return model, hyperparameter_tuning, cv_scores
+    return model, hyperparameter_tuning, cv_results
 
