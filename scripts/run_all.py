@@ -67,7 +67,8 @@ def merge_csvs_on_mrid(csv_paths):
     Returns a single merged dataframe.
     """
     if not csv_paths:
-        raise ValueError("No CSV paths provided.")
+        print("No CSV paths were passed to MRID-based merge. Did SPARE produce any output?")
+        return pd.DataFrame()
 
     # Load the first one as the base
     merged = pd.read_csv(csv_paths[0])
@@ -138,13 +139,12 @@ print("Original dataframe passed to SPARE runall has columns: {df_original.colum
 
 df_original['Sex_M'] = df_original['Sex'].apply(lambda x: 1 if x=='M' else 0)
 
-dlicv_found = False
-if 'DL_MUSE_Volume_702' in df_original.columns:
-    dlicv_found = True
-    df_original['702'] = df_original['DL_MUSE_Volume_702']
-if 'H_DL_MUSE_Volume_702' in df_original.columns:
-    dlicv_found = True
-    df_original['702'] = df_original['H_DL_MUSE_Volume_702']
+<<<<<<< HEAD
+#if 'DL_MUSE_Volume_702' in df_original.columns:
+#    df_original['702'] = df_original['DL_MUSE_Volume_702']
+#if 'H_DL_MUSE_Volume_702' in df_original.columns:
+#    df_original['702'] = df_original['H_DL_MUSE_Volume_702']
+=======
 
 if not dlicv_found:
     print("Original dataframe passed to SPARE runall doesn't have DLICV columns.")
@@ -153,8 +153,10 @@ with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tmp_f
     temp_csv_path = tmp_file.name
     df_original.to_csv(temp_csv_path, index=False)
 
-non_cvm_models = list_filtered_files('/spare_score/Models/final_models', ['HYPERTENSION', 'DIABETES', 'OBESITY', 'SMOKING', 'HYPERLIPIDEMIA'])
-cvm_models = list_filtered_files('/spare_score/Models/withDLWMLS', [])
+## Here's where we filter out models
+
+non_cvm_models = list_filtered_files('/spare_score/Models/final_models', forbidden_substrings=['HYPERTENSION', 'DIABETES', 'OBESITY', 'SMOKING', 'HYPERLIPIDEMIA', 'MDD', 'PSY'])
+cvm_models = list_filtered_files('/spare_score/Models/withDLWMLS', forbidden_substrings=[])
 
 model_location_dict = {'cvm': cvm_models, 'misc': non_cvm_models}
 
@@ -163,15 +165,18 @@ all_successful_tmp_csvs = []
 successful_tags = []
 exit_codes = []
 encountered_spare_tags = []
+print("See https://huggingface.co/nichart/SPARE-ALL/tree/main for all available model files...")
+num_models_attempted = 0
+num_models_succeeded = 0
 for model in model_location_dict[args.category]:
-    print(f"Model {model}")
+    print(f"Scanning model {model}")
     if 'harmonized' in model.lower():
         if not args.harmonize:
-            print("Skipping...")
+            print("Skipping (this model is for harmonized data)...")
             continue
     else:
         if args.harmonize:
-            print("Skipping...")
+            print("Skipping (this model is for unharmonized data)...")
             continue
     model_joblib = joblib.load(model)
     inference_mode = model_joblib['meta_data']['spare_type']
@@ -183,6 +188,7 @@ for model in model_location_dict[args.category]:
         encountered_spare_tags.append(spare_tag)
 
     print(f"Spare tag {spare_tag}, inference mode {inference_mode}")
+    num_models_attempted += 1
     with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tmp_out:
         temp_out_path = tmp_out.name
         all_tmp_csvs.append(temp_out_path)
@@ -190,6 +196,8 @@ for model in model_location_dict[args.category]:
         command_parts = ['NiChart_SPARE', '-kv', 'MRID', '-i', temp_csv_path, '-o', temp_out_path, '-t', inference_mode, '-m', model] + unknown_args
         command = ' '.join(f"{part}" if ' ' in part else part for part in command_parts)
         
+        print(f"Running inference using SPARE model from file {model}")
+
         exit_code = os.system(command)
         exit_codes.append(exit_code)
         if os.WEXITSTATUS(exit_code) > 0:
@@ -197,12 +205,18 @@ for model in model_location_dict[args.category]:
         else:
             successful_tags.append(spare_tag)
             all_successful_tmp_csvs.append(temp_out_path)
+            num_models_succeeded += 1
+
+if num_models_attempted == 0:
+    print("No relevant models were found for this combination of requested SPARE scores and harmonization status. This is not necessarily an error, please see documentation.")
+    sys.exit(0)
 
 dfs = []
 for index, csv in  enumerate(all_successful_tmp_csvs):
     df = pd.read_csv(csv)
     df = rename_spare_columns(df, successful_tags[index])
     dfs.append(df)
+
 
 df_merged = merge_dfs_on_mrid(dfs)
 df_merged.to_csv(args.output)
