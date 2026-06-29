@@ -293,32 +293,20 @@ def load_svm_model(filepath: str):
 
 def infer_svm_model(input_file, 
                     model_path, 
-                    spare_type, 
                     output_file, 
-                    key_variable='MRID',
-                    icv_col="DL_MUSE_Volume_702",
-                    age_col='Age',
-                    sex_col='Sex_M',
-                    drop_columns=None,
-                    append_spare_tag=None,
-                    cv=None):
+                    key_variable='MRID'):
     """Make predictions using trained model"""
     
     # Load the main model
     print("Loading trained model...")
-    model_info, meta_data, preprocessor, _, _ = load_svm_model(model_path) # TBF
-
+    model_info, meta_data, preprocessor, ht, cv = load_svm_model(model_path) # TBF
     model = model_info['model']
     bias_terms = model_info['bias']
+    spare_type=meta_data['spare_type']
 
     # Load data
     print("Loading prediction data...")
-    df = load_csv_data(input_file, drop_columns=drop_columns)
-
-    # # *(TBF) in case non-encoded Sex column in the input df
-    # if "Sex" in df.columns.tolist() and "Sex_M" not in df.columns.tolist():
-    #     if "M" in df['Sex'].unique():
-    #         df['Sex_M'] = df['Sex'].apply(lambda x: 1 if x=='M' else 'F')
+    df = load_csv_data(input_file)
 
     # Check all columns exist in the input file
     for nf in meta_data['training_data_description']['feature_names']:
@@ -329,31 +317,20 @@ def infer_svm_model(input_file,
 
     # subset for only needed columns
     if meta_data['training_data_description']['target_column'] in df.columns.tolist():
-        # print(f"DEBUG: target_column is in df columns.")
-        # print(f"DEBUG: key_variable: {key_variable}")
-        # print(f"DEBUG: meta_data['training_data_description']['feature_names']: {meta_data['training_data_description']['feature_names']}")
-        # print(f"DEBUG: meta_data['training_data_description']['target_column']: {meta_data['training_data_description']['target_column']}")
-        # df = df[[key_variable, age_col, 'Sex', icv_col, meta_data['training_data_description']['target_column']] + meta_data['training_data_description']['feature_names']]
         df = df[[key_variable, meta_data['training_data_description']['target_column']] + meta_data['training_data_description']['feature_names']]
 
     else:
-        # print(f"DEBUG: target column is not in df columns.")
-        # print(f"DEBUG: key_variable: {key_variable}")
-        # print(f"DEBUG: meta_data['training_data_description']['feature_names']: {meta_data['training_data_description']['feature_names']}")
-        # print(f"DEBUG: meta_data['training_data_description']['target_column']: {meta_data['training_data_description']['target_column']}")
-        # df = df[[key_variable, age_col, 'Sex', icv_col] + meta_data['training_data_description']['feature_names']]
         df = df[[key_variable] + meta_data['training_data_description']['feature_names']]
 
 
     print(f"Preprocessing the input...{df.shape}")
     print(df.columns.tolist())
 
-    # Perform ICV correction across all ROIs if asked (To-add)
-
-    # Perform Age, Sex, ICV residualization if asked (To-add)
+    # Perform ICV correction across all ROIs if asked (To-be-added. Perform this directly to your list for now)
+    # Perform Age, Sex, ICV residualization if asked (To-be-added. Perform this directly to your list for now)
 
     # Regression task
-    if spare_type in ['RG','BA']:
+    if spare_type in ['RG']:
         X, y, _, _ = preprocess_regression_data( 
             df = df.drop([key_variable],axis=1),
             target_column = meta_data['training_data_description']['target_column'],
@@ -362,11 +339,9 @@ def infer_svm_model(input_file,
             for_training=False
             )
         print(f"Input preprocessing completed. Feature shape: {X.shape}")
-        # pass        
+
     # Classification task 
-    elif spare_type in ['CL','AD']:
-        # Preprocess data
-        
+    elif spare_type in ['CL']:
         X, y, _, _ = preprocess_classification_data( 
             df = df.drop([key_variable],axis=1),
             target_column = meta_data['training_data_description']['target_column'],
@@ -376,25 +351,10 @@ def infer_svm_model(input_file,
             )
         print(f"Input preprocessing completed. Feature shape: {X.shape}")
     
-    # # CVMs
-    # elif spare_type in ['CVM','HT','T2B','SM','BMI']:
-    #     print("Processing CVM")
-    #     from .data_prep import apply_cvm_residualization
-    #     df = apply_cvm_residualization(df, 
-    #                                    age_col=age_col,
-    #                                    sex_col='Sex',
-    #                                    dlicv_col=icv_col)
-    #     df = df.drop([age_col,'Sex',icv_col],axis=1)
-    #     #print(f"Keeping just the residualized features: {df.drop([target_column],axis=1).columns}")
-    #     X, y, _, _ = preprocess_classification_data( 
-    #         df = df.drop([key_variable],axis=1),
-    #         target_column = meta_data['training_data_description']['target_column'],
-    #         feature_encoder = preprocessor['feature_encoder'],
-    #         feature_scaler= preprocessor['feature_scaler'],
-    #         for_training=False
-    #         )
     # Get prediction
+    print("Predicting with the main model")
     predictions = model.predict(X)
+    
     # Correct for bias
     if bias_terms != None:
         if bias_terms['method'] == 1:
@@ -407,37 +367,33 @@ def infer_svm_model(input_file,
     # Create output dataframe
     output_df = pd.DataFrame()
     output_df[key_variable] = df[key_variable]
+    # Save outputs of the main model
     output_df['SPARE_'+spare_type] = predictions
-    
     if spare_type in ['CL','AD']:
         output_df['SPARE_'+spare_type+'_decision_function'] = model.decision_function(X)
 
-    # when cv was performed, return all results generated using models per fold
-
+    # infer with all CV models (each fold)
+    repeat='Repeat_0'
+    try:
+        cv_fold = meta_data['pipeline_description']['cv_fold']
+        if(cv_fold>1):
+            for fold in list(cv[repeat].keys()):
+                print(f"Predicting for CV Fold: {fold}")
+                cv_model = cv[repeat][fold]['model']
+                # Get prediction
+                cv_predictions = cv_model.predict(X)
+                output_df['SPARE_'+spare_type+'_'+fold] = cv_predictions
+                if spare_type in ['CL']:
+                    output_df['SPARE_'+spare_type+'_'+fold+'_decision_function'] = model.decision_function(X)
+    except Exception as e:
+        print("Error:",e)          
+    
+    # append ground truth if it exists in the inference input
     if meta_data['training_data_description']['target_column'] in df.columns:
         output_df['GT_'+spare_type] = y
-
-    mapping = {}
-    # if append_spare_tag is not None:
-    #     
-
-    #     # SPARE_CL  -> SPARE_<tag>
-    #     if "SPARE_CL" in df.columns:
-    #         mapping["SPARE_CL"] = f"SPARE_{tag}"
-
-    #     # SPARE_RG  -> SPARE_<tag>
-    #     if "SPARE_RG" in df.columns:
-    #         mapping["SPARE_RG"] = f"SPARE_{tag}"
-
-    #     # SPARE_CL_decision_function -> SPARE_<tag>_decision_function
-    #     if "SPARE_CL_decision_function" in df.columns:
-    #         mapping["SPARE_CL_decision_function"] = f"SPARE_{tag}_decision_function"
-
-    #     # GT_RG -> <tag>_GT_RG
-    #     if "GT_RG" in df.columns:
-    #         mapping["GT_RG"] = f"{tag}_GT_RG"
-
-    output_df = output_df.rename(columns=mapping)
+    
+    # mapping = {}
+    # output_df = output_df.rename(columns=mapping)
     
     # Save predictions
     output_df.to_csv(output_file, index=False)

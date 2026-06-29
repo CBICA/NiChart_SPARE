@@ -64,7 +64,7 @@ def main():
     parser.add_argument('-tw', '--train_whole', type=str, default='True',
                        help='Train final model on entire dataset (True/False)')
     parser.add_argument('-cf', '--cv_fold', type=int, default=5,
-                       help='Number of folds for CV (Default: 5)')
+                       help='Number of folds for CV (Default: None)')
     parser.add_argument('-mo', '--model_output', 
                        help='Output model file path (for training)')
     # Inference specific arguments
@@ -142,24 +142,27 @@ def main():
                 raise ValueError("Model path (-m) is required for inference")
             if not args.output:
                 raise ValueError("Output path (-o) is required for inference")
+            import joblib
+            # open model
+            model=joblib.load(args.model)
+            model_type=model['meta_data']['model_description']['model_type']
+
             # Create output directory if it doesn't exist
             if not os.path.exists(os.path.dirname(args.output)):
                 print(f"Output directory does not exist. Creating f{os.path.dirname(args.output)}...")
                 os.mkdir(os.path.dirname(args.output))
             # Run inference
-            if args.model_type == 'SVM':
+            if model_type == 'SVM':
                 infer_svm_model(
                     input_file=args.input,
                     model_path=args.model,
-                    spare_type=args.type,
                     output_file=args.output,
-                    key_variable=args.key_variable,
-                    append_spare_tag=args.append_spare_tag,
+                    key_variable=args.key_variable
                 )
-            elif args.model_type == 'MLP':
+            elif model_type == 'MLP':
                 print("MLP is coming soon!")
             else:
-                print(f"{args.model_type} is an unsupported model type.")
+                raise ValueError(f"{model_type} is an unsupported.")
             
     except Exception as e:
         print(f"Error: {e}")
