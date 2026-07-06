@@ -135,6 +135,112 @@ NiChart_SPARE -a inference \
               -kv MRID
                 
 ```
+## Model File (`.joblib`) Schema
+
+A model saved by `trainer` (`-mo model.joblib`) is a single `joblib`-pickled Python `dict` (see `save_svm_model`/`load_svm_model` in `NiChart_SPARE/svm.py`) with five top-level keys:
+
+```
+{
+  "model": {
+    "model": <fitted sklearn estimator>,   # LinearSVR/SVR (RG) or LinearSVC/SVC (CL)
+    "bias": <dict or None>                 # regression-only bias correction, see below
+  },
+  "meta_data": { ... },        # see below
+  "preprocessor": { ... },     # see below
+  "hyperparameter_tuning": { ... },  # see below
+  "cross_validation": { ... }  # see below
+}
+```
+
+`__main__.py` reads `model['meta_data']['model_description']['model_type']` directly off the loaded dict to route inference, and `svm.load_svm_model` unpacks all five keys as a tuple.
+
+##### `meta_data` (built by `get_metadata` in `util.py`)
+
+```
+{
+  "spare_type": "CL" | "RG",
+  "package_version": "0.1.0",
+  "model_description": {
+    "model_type": "SVM",
+    "kernel": "linear" | "linear_fast" | "poly" | "rbf" | "sigmoid"
+  },
+  "training_data_description": {
+    "target_column": str,
+    "feature_names": [str, ...],   # all input columns except the target
+    "feature_count": int,
+    "data_size": int               # number of training rows
+  },
+  "pipeline_description": {
+    "hyperparameter_tuning": bool,
+    "cv_fold": int,
+    "model_class_balancing": bool,
+    "trained_using_whole_set": bool
+  }
+}
+```
+
+`infer_svm_model` uses `training_data_description.feature_names`/`target_column` to validate and subset an inference CSV before predicting.
+
+##### `preprocessor` (built by `get_preprocessors` in `util.py`)
+
+```
+{
+  "feature_encoder": dict[str, LabelEncoder] | None,  # one entry per categorical column
+  "feature_scaler": dict[str, StandardScaler] | None   # one entry per numeric column
+}
+```
+
+##### `model.bias` (regression only; set in `pipelines/spare_svm_regression.py`, `None` for classification)
+
+```
+{
+  "model": <fitted sklearn LinearRegression>,
+  "method": 1 | 2,       # 1 = Beheshti et al. (residual approach), 2 = Cole et al.
+  "intercept": float,
+  "coef": float
+}
+```
+
+##### `hyperparameter_tuning` (built by `get_hyperparameter_tuning`; `{}` if `-ht False`)
+
+```
+{
+  "hyperparameter_tuner": <fitted sklearn GridSearchCV>,
+  "best_params": dict,      # winning parameter combination
+  "search_grid": dict       # full grid that was searched
+}
+```
+
+##### `cross_validation` (`{}` if `-cf 0`; shape differs by `spare_type`)
+
+Regression (`RG`) — one repeat, keyed by fold:
+```
+{
+  "Repeat_0": {
+    "scores": {"Fold_0": {<metric>: float, ...}, "Fold_1": {...}, ...},
+    "cv_results": {"Fold_0": <pandas.DataFrame: test_reference, test_prediction, test_prediction_BC?, fold>, ...}
+  }
+}
+```
+
+Classification (`CL`) — 3 repeats, keyed by fold, with a per-fold fitted model:
+```
+{
+  "Repeat_0": {
+    "Fold_0": {
+      "model": <fitted sklearn estimator for this fold>,
+      "cv_validation": <pandas.DataFrame: test_reference, test_prediction, test_decision_function, fold>,
+      "cv_scores": {<metric>: float, ...}
+    },
+    "Fold_1": { ... }, ...
+  },
+  "Repeat_1": { ... },
+  "Repeat_2": { ... }
+}
+```
+
+`infer_svm_model` uses these per-fold models (when `cv_fold > 1`) to additionally emit a `SPARE_<type>_Fold_<n>` prediction column alongside the main model's output.
+
 ## Documentation
 
 Coming Soon (Wiki-page)
