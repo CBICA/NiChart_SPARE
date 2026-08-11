@@ -312,7 +312,14 @@ def infer_svm_model(input_file,
     df = load_csv_data(input_file)
 
     # Check all columns exist in the input file
-    for nf in meta_data['training_data_description']['feature_names']:
+    _cvm_types = ['CVM', 'HT', 'T2B', 'SM', 'BMI']
+    _required = list(meta_data['training_data_description']['feature_names'])
+    if spare_type in _cvm_types:
+        # apply_cvm_residualization() needs these; validate here so a missing one
+        # reports the same "Missing columns:" error as any other required column
+        # instead of a bare KeyError deeper in the call stack.
+        _required += [c for c in (age_col, sex_col, icv_col) if c not in _required]
+    for nf in _required:
         if nf not in df.columns:
             raise Exception("Missing columns:"+nf)
         else:
@@ -321,13 +328,12 @@ def infer_svm_model(input_file,
     # subset for only needed columns
     # CVM-family models residualize on Age/Sex/ICV *after* this subset, so those
     # columns have to survive it - otherwise inference dies with KeyError: 'Age'.
-    _cvm_types = ['CVM', 'HT', 'T2B', 'SM', 'BMI']
     _keep = [key_variable]
     if meta_data['training_data_description']['target_column'] in df.columns.tolist():
         _keep.append(meta_data['training_data_description']['target_column'])
     if spare_type in _cvm_types:
         for _c in (age_col, sex_col, icv_col):
-            if _c in df.columns and _c not in _keep:
+            if _c not in _keep:
                 _keep.append(_c)
     df = df[_keep + meta_data['training_data_description']['feature_names']]
 

@@ -107,21 +107,25 @@ def rename_spare_columns(df, tag):
 
     mapping = {}
 
-    # SPARE_CL  -> SPARE_<tag>
-    if "SPARE_CL" in df.columns:
-        mapping["SPARE_CL"] = f"SPARE_{tag}"
-
-    # SPARE_RG  -> SPARE_<tag>
-    if "SPARE_RG" in df.columns:
-        mapping["SPARE_RG"] = f"SPARE_{tag}"
+    # SPARE_<spare_type> -> SPARE_<tag>, for every inference mode.
+    # Listing only CL/RG left SPARE_CVM (and SPARE_AD/SPARE_BA) untouched, so
+    # several models kept the same column name and collided as _x/_y on merge.
+    for col in df.columns:
+        if col == "SPARE_CL_decision_function" or not col.startswith("SPARE_"):
+            continue
+        if col.endswith("_decision_function"):
+            mapping[col] = f"SPARE_{tag}_decision_function"
+        else:
+            mapping[col] = f"SPARE_{tag}"
 
     # SPARE_CL_decision_function -> SPARE_<tag>_decision_function
     if "SPARE_CL_decision_function" in df.columns:
         mapping["SPARE_CL_decision_function"] = f"SPARE_{tag}_decision_function"
 
-    # GT_RG -> <tag>_GT_RG
-    if "GT_RG" in df.columns:
-        mapping["GT_RG"] = f"{tag}_GT_RG"
+    # GT_RG / GT_BA -> <tag>_GT_RG
+    for gt in ("GT_RG", "GT_BA"):
+        if gt in df.columns:
+            mapping[gt] = f"{tag}_{gt}"
 
     return df.rename(columns=mapping)
 
@@ -144,10 +148,14 @@ if 'Sex' not in df_original.columns:
     print("Error: Required 'Sex' column not found in the CSV file.")
     sys.exit(1)
 
-print("Original dataframe passed to SPARE runall has columns: {df_original.columns}")
+print(f"Original dataframe passed to SPARE runall has columns: {df_original.columns}")
 
 df_original['Sex_M'] = df_original['Sex'].apply(lambda x: 1 if x=='M' else 0)
 
+# dlicv_found was referenced but never assigned, so run_all.py raised
+# NameError before reaching model selection - for every --category.
+dlicv_found = any(c in df_original.columns
+                  for c in ('DL_MUSE_Volume_702', 'H_DL_MUSE_Volume_702', 'DLICV', '702'))
 if not dlicv_found:
     print("Original dataframe passed to SPARE runall doesn't have DLICV columns.")
 
