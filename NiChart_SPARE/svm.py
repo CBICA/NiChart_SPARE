@@ -291,10 +291,13 @@ def load_svm_model(filepath: str):
     return model_data['model'], model_data['meta_data'], model_data['preprocessor'], model_data['hyperparameter_tuning'], model_data['cross_validation']
 
 
-def infer_svm_model(input_file, 
-                    model_path, 
-                    output_file, 
-                    key_variable='MRID'):
+def infer_svm_model(input_file,
+                    model_path,
+                    output_file,
+                    key_variable='MRID',
+                    age_col='Age',
+                    sex_col='Sex',
+                    icv_col='DL_MUSE_Volume_702'):
     """Make predictions using trained model"""
     
     # Load the main model
@@ -309,18 +312,30 @@ def infer_svm_model(input_file,
     df = load_csv_data(input_file)
 
     # Check all columns exist in the input file
-    for nf in meta_data['training_data_description']['feature_names']:
+    _cvm_types = ['CVM', 'HT', 'T2B', 'SM', 'BMI']
+    _required = list(meta_data['training_data_description']['feature_names'])
+    if spare_type in _cvm_types:
+        # apply_cvm_residualization() needs these; validate here so a missing one
+        # reports the same "Missing columns:" error as any other required column
+        # instead of a bare KeyError deeper in the call stack.
+        _required += [c for c in (age_col, sex_col, icv_col) if c not in _required]
+    for nf in _required:
         if nf not in df.columns:
             raise Exception("Missing columns:"+nf)
         else:
             print(f"Checked:\t{nf}")
 
     # subset for only needed columns
+    # CVM-family models residualize on Age/Sex/ICV *after* this subset, so those
+    # columns have to survive it - otherwise inference dies with KeyError: 'Age'.
+    _keep = [key_variable]
     if meta_data['training_data_description']['target_column'] in df.columns.tolist():
-        df = df[[key_variable, meta_data['training_data_description']['target_column']] + meta_data['training_data_description']['feature_names']]
-
-    else:
-        df = df[[key_variable] + meta_data['training_data_description']['feature_names']]
+        _keep.append(meta_data['training_data_description']['target_column'])
+    if spare_type in _cvm_types:
+        for _c in (age_col, sex_col, icv_col):
+            if _c not in _keep:
+                _keep.append(_c)
+    df = df[_keep + meta_data['training_data_description']['feature_names']]
 
 
     print(f"Preprocessing the input...{df.shape}")
@@ -340,9 +355,9 @@ def infer_svm_model(input_file,
             )
         print(f"Input preprocessing completed. Feature shape: {X.shape}")
 
-    # Classification task 
+    # Classification task
     elif spare_type in ['CL']:
-        X, y, _, _ = preprocess_classification_data( 
+        X, y, _, _ = preprocess_classification_data(
             df = df.drop([key_variable],axis=1),
             target_column = meta_data['training_data_description']['target_column'],
             feature_encoder = preprocessor['feature_encoder'],
@@ -350,7 +365,25 @@ def infer_svm_model(input_file,
             for_training=False
             )
         print(f"Input preprocessing completed. Feature shape: {X.shape}")
-    
+
+    # Cardiovascular / metabolic task (residualize on Age, Sex, ICV first)
+    elif spare_type in _cvm_types:
+        print("Processing CVM")
+        from .data_prep import apply_cvm_residualization
+        df = apply_cvm_residualization(df,
+                                       age_col=age_col,
+                                       sex_col=sex_col,
+                                       dlicv_col=icv_col)
+        df = df.drop([c for c in (age_col, sex_col, icv_col) if c in df.columns], axis=1)
+        X, y, _, _ = preprocess_classification_data(
+            df = df.drop([key_variable],axis=1),
+            target_column = meta_data['training_data_description']['target_column'],
+            feature_encoder = preprocessor['feature_encoder'],
+            feature_scaler= preprocessor['feature_scaler'],
+            for_training=False
+            )
+        print(f"Input preprocessing completed. Feature shape: {X.shape}")
+
     # Get prediction
     print("Predicting with the main model")
     predictions = model.predict(X)
