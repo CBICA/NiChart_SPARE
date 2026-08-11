@@ -212,10 +212,28 @@ def apply_cvm_residualization(df: pd.DataFrame,
 
     warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    df_params = pd.read_csv(os.path.join(current_dir, 'reference', 'covparams_scaler_sparecvms_dl2.csv'))
+    ref_dir = os.path.join(current_dir, 'reference')
+    # The packaged reference table is 'covparams_scaler_sparecvms_dl.csv'. Older code
+    # referred to a '..._dl2.csv' that is not shipped, so CVM inference failed with
+    # FileNotFoundError. Prefer '_dl2' when present (in case a newer table is added),
+    # otherwise fall back to the packaged one and fail with an explicit message.
+    _candidates = ['covparams_scaler_sparecvms_dl2.csv', 'covparams_scaler_sparecvms_dl.csv']
+    params_path = next(
+        (os.path.join(ref_dir, c) for c in _candidates if os.path.isfile(os.path.join(ref_dir, c))),
+        None,
+    )
+    if params_path is None:
+        raise FileNotFoundError(
+            "CVM residualization reference table not found. Looked for "
+            f"{_candidates} in {ref_dir}"
+        )
+    df_params = pd.read_csv(params_path)
 
-    # df_params = pd.read_csv("/home/kylebaik/Packages/NiChart_SPARE/NiChart_SPARE/reference/covparams_scaler_sparecvms_dl2.csv")
-    # df_params = df_params.rename(columns={'DLICV':dlicv_col})
+    # The reference table lists the ICV row under its DLMUSE column name, while the
+    # code below looks it up as 'DLICV' (df was renamed above). Without this the
+    # lookup returns an empty array and residualization dies with
+    # "operands could not be broadcast together with shapes (n,) (0,)".
+    df_params['Features'] = df_params['Features'].replace({dlicv_col: 'DLICV'})
 
     df['Age_Original'] = df[age_col]#.copy(deep=True)
     meanage = df['Age_Original'].mean() # change to a fixed location in residualization map

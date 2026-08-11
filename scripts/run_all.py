@@ -82,10 +82,19 @@ def merge_csvs_on_mrid(csv_paths):
 
 def extract_spare_tag(path):
     """
-    Given a filename like SPARE-BA-RAW-xyz.joblib,
-    return the tag after SPARE-, e.g. 'BA'.
+    Given a filename like SPARE-BA-RAW-xyz.joblib, return the tag after SPARE-,
+    e.g. 'BA'.
+
+    The CVM family ships one model per condition (SPARE-CVM-T2D-Harmonized,
+    SPARE-CVM-HYPERTENSION-Harmonized, ...). Returning just 'CVM' makes all of
+    them collide on the duplicate-tag check below, so only the first one is ever
+    run and the rest are silently skipped. Keep the condition in the tag so each
+    model gets its own output column.
     """
     name = os.path.basename(path)
+    m = re.search(r"SPARE-(CVM-[A-Za-z0-9]+)-", name)
+    if m:
+        return m.group(1)
     m = re.search(r"SPARE-([A-Za-z0-9]+)-", name)
     return m.group(1) if m else None
 
