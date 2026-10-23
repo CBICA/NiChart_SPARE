@@ -116,11 +116,32 @@ def rename_spare_columns(df, tag):
 
     return df.rename(columns=mapping)
 
+def debug_column(df: pd.DataFrame, col: str, name: str = "df", n: int = 5) -> None:
+    """Print dtype and sample-value diagnostics for one column."""
+    if col not in df.columns:
+        print(f"[{name}] column '{col}' not found")
+        return
+
+    s = df[col]
+    print(f"[{name}] {col}: dtype={s.dtype}, n={len(s)}, nulls={s.isna().sum()}")
+
+    # If dtype is object, it can still hide mixed python types (int, str, etc.)
+    if s.dtype == object:
+        type_counts = s.map(lambda x: type(x).__name__).value_counts()
+        print(f"[{name}] {col}: underlying python types -> {type_counts.to_dict()}")
+
+    # Show repr() of a few values so you can SEE quotes/no-quotes
+    sample = s.dropna().head(n)
+    print(f"[{name}] {col}: sample values -> {[repr(v) for v in sample]}")
+
 df_original = pd.read_csv(args.input)
+debug_column(df_original, "MRID", "dlmuse-csv")
 
 if args.demographics_csv is not None:
     print("Detected optional demographics file. Merging files to ensure all data is available for SPARE.")
     df_demog = pd.read_csv(args.demographics_csv)
+    debug_column(df_demog, "MRID", "demog-csv")
+    print(f"Demographic dataframe passed to SPARE runall has columns: {df_demog.columns}")
     len_original = len(df_original)
     len_demog = len(df_demog)
     print(f"Length of original data: { len_original }")
@@ -135,19 +156,14 @@ if 'Sex' not in df_original.columns:
     print("Error: Required 'Sex' column not found in the CSV file.")
     sys.exit(1)
 
-print("Original dataframe passed to SPARE runall has columns: {df_original.columns}")
+print(f"Original dataframe passed to SPARE runall has columns: {df_original.columns}")
 
 df_original['Sex_M'] = df_original['Sex'].apply(lambda x: 1 if x=='M' else 0)
 
-<<<<<<< HEAD
 #if 'DL_MUSE_Volume_702' in df_original.columns:
 #    df_original['702'] = df_original['DL_MUSE_Volume_702']
 #if 'H_DL_MUSE_Volume_702' in df_original.columns:
 #    df_original['702'] = df_original['H_DL_MUSE_Volume_702']
-=======
-
-if not dlicv_found:
-    print("Original dataframe passed to SPARE runall doesn't have DLICV columns.")
 
 with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tmp_file:
     temp_csv_path = tmp_file.name
