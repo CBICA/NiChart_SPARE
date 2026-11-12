@@ -280,10 +280,15 @@ if sex_flags.isna().any():
     sys.exit(1)
 df_original['Sex_M'] = sex_flags.astype(int)
 
+
 #if 'DL_MUSE_Volume_702' in df_original.columns:
 #    df_original['702'] = df_original['DL_MUSE_Volume_702']
 #if 'H_DL_MUSE_Volume_702' in df_original.columns:
 #    df_original['702'] = df_original['H_DL_MUSE_Volume_702']
+
+if not dlicv_found:
+    print("Original dataframe passed to SPARE runall doesn't have DLICV columns.")
+
 
 with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tmp_file:
     temp_csv_path = tmp_file.name

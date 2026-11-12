@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.metrics import accuracy_score, balanced_accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, average_precision_score, confusion_matrix
 
 
 def report_regression_metrics(y_true, y_pred):
@@ -30,8 +30,8 @@ def report_regression_metrics(y_true, y_pred):
     }
 
 
-def report_classification_metrics(y_true, y_pred, y_decision_function):
-    """Report classification metrics: ROC-AUC, Accuracy, Balanced Accuracy, Sensitivity, Specificity, Precision, Recall, F1."""
+def report_classification_metrics(y_true, y_pred, y_decision_function, class_balancing=False):
+    """Report classification metrics: ROC-AUC, Accuracy, Balanced Accuracy, Sensitivity, Specificity, Precision, Recall, F1, Average Precision."""
     y_pred = np.asarray(y_pred)
     y_true = np.asarray(y_true)
     n_classes = len(np.unique(y_true))
@@ -57,26 +57,37 @@ def report_classification_metrics(y_true, y_pred, y_decision_function):
             specificity = None
     else:
         specificity = None  # Not well-defined for multiclass
-
-    # ROC-AUC
+    
+    # ROC-AUC 
     try:
         if n_classes == 2:
             roc_auc = roc_auc_score(y_true, y_decision_function)
         else:
-            roc_auc = roc_auc_score(y_true, y_decision_function, multi_class='ovr')
+            roc_auc = roc_auc_score(y_true, y_decision_function, average=None, multi_class='ovr')
+
     except Exception:
         roc_auc = None
+    
+    # Average Precision
+    avg_precision = average_precision_score(y_true, y_decision_function)
 
-    return {
-        'Accuracy': float(accuracy),
-        'Balanced Accuracy': float(balanced_accuracy),
-        'Precision': float(precision),
-        'Recall': float(recall),
-        'F1': float(f1),
-        'Sensitivity': float(sensitivity),
-        'Specificity': float(specificity),
-        'ROC-AUC': float(roc_auc)
-    }
+    final_attributes = ['Accuracy','Balanced Accuracy','Precision','Recall','F1','Sensitivity','Specificity','Average_Precision','ROC-AUC']
+    final_scores = accuracy, balanced_accuracy, precision, recall, f1,sensitivity, specificity, avg_precision, roc_auc
+    final_dict = {}
+    for sc in range(len(final_scores)):
+        if final_scores[sc] != None:
+            final_dict[final_attributes[sc]] = final_scores[sc]
+    return final_dict
+    # return {
+    #     'Accuracy': float(accuracy),
+    #     'Balanced Accuracy': float(balanced_accuracy),
+    #     'Precision': float(precision),
+    #     'Recall': float(recall),
+    #     'F1': float(f1),
+    #     'Sensitivity': float(sensitivity),
+    #     'Specificity': float(specificity),
+    #     'ROC-AUC': float(roc_auc)
+    # }
 
 
 ###################################################################

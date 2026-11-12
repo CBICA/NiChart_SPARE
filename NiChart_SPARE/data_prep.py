@@ -26,7 +26,7 @@ def validate_dataframe(df: pd.DataFrame, target_column: str) -> None:
 # ############# DATA PREPROCESSING ##############
 def load_csv_data(file_path, drop_columns=None):
     """Load CSV data and return dataframe, optionally dropping specified columns"""
-    df = pd.read_csv(file_path)
+    df = pd.read_csv(file_path, low_memory=False)
     print(f"Loaded data: {len(df)} samples, {len(df.columns)} columns")
     if drop_columns:
         for col in drop_columns:

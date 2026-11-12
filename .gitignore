@@ -12,3 +12,4 @@ notebooks/
 */noCB/
 !NiChart_SPARE/reference/covparams_scaler_sparecvms_dl.csv
 !NiChart_SPARE/reference/covparams_scaler_sparecvms_dl2.csv
+*/spare_svm_cvm.py
