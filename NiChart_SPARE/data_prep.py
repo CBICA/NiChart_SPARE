@@ -218,7 +218,32 @@ def apply_cvm_residualization(df: pd.DataFrame,
     # df_params = df_params.rename(columns={'DLICV':dlicv_col})
 
     df['Age_Original'] = df[age_col]#.copy(deep=True)
-    meanage = df['Age_Original'].mean() # change to a fixed location in residualization map
+
+    # Centre age on the training mean held in the residualization map, not on
+    # the mean of whoever happens to be in this batch.
+    #
+    # The coefficients below were fitted against mean-centred age, so centring
+    # on the batch shifts every prediction by
+    # (training_mean - batch_mean) * coefficient: the same scan scores
+    # differently depending on which other subjects were submitted with it. On
+    # 561 harmonized IXI subjects, re-running the 60 youngest on their own
+    # (mean age 23.8) rather than inside the full cohort (mean age 48.6)
+    # flipped the label for 1 of 60 on both SPARE-CVM-T2D and
+    # SPARE-CVM-HYPERLIPIDEMIA.
+    #
+    # The map's Scaler_Mean for age is that training mean -- it is what
+    # standardizes the age column a few lines down. A map without an age row
+    # cannot be centred correctly, and falling back to the batch mean is the
+    # bug being fixed here, so say so instead.
+    age_params = df_params.loc[df_params['Features'] == age_col, 'Scaler_Mean']
+    if len(age_params) != 1:
+        raise ValueError(
+            f"Residualization map has {len(age_params)} rows for the age column "
+            f"'{age_col}'; exactly one is needed to centre age on the training "
+            f"mean. Check that reference/covparams_scaler_sparecvms_dl2.csv "
+            f"carries an '{age_col}' row."
+        )
+    meanage = float(age_params.iloc[0])
 
     df['Mean_centered_age'] = df['Age_Original']-meanage
     df['DLICV_Original'] = df['DLICV'].copy(deep=True)

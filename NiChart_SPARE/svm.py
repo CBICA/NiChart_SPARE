@@ -327,21 +327,38 @@ def infer_svm_model(input_file,
             print(f"Checked:\t{nf}")
 
     # subset for only needed columns
-    if meta_data['training_data_description']['target_column'] in df.columns.tolist():
-        # print(f"DEBUG: target_column is in df columns.")
-        # print(f"DEBUG: key_variable: {key_variable}")
-        # print(f"DEBUG: meta_data['training_data_description']['feature_names']: {meta_data['training_data_description']['feature_names']}")
-        # print(f"DEBUG: meta_data['training_data_description']['target_column']: {meta_data['training_data_description']['target_column']}")
-        # df = df[[key_variable, age_col, 'Sex', icv_col, meta_data['training_data_description']['target_column']] + meta_data['training_data_description']['feature_names']]
-        df = df[[key_variable, meta_data['training_data_description']['target_column']] + meta_data['training_data_description']['feature_names']]
+    #
+    # The CVM branch below residualizes the ROIs against Age, Sex and ICV, so
+    # those three columns have to survive this subsetting -- the version that
+    # kept only [key_variable] + feature_names made every CVM model die with
+    # "Error: 'Age'". They cannot simply be listed unconditionally either: the
+    # CL-type models in Models/withDLWMLS carry Age and the ICV column *as
+    # features*, and naming a column twice here hands preprocessing a
+    # duplicated frame. So take only what the feature list does not already
+    # provide, and remember it so the CVM branch can drop exactly that again.
+    feature_names = meta_data['training_data_description']['feature_names']
+    target_column = meta_data['training_data_description']['target_column']
 
-    else:
-        # print(f"DEBUG: target column is not in df columns.")
-        # print(f"DEBUG: key_variable: {key_variable}")
-        # print(f"DEBUG: meta_data['training_data_description']['feature_names']: {meta_data['training_data_description']['feature_names']}")
-        # print(f"DEBUG: meta_data['training_data_description']['target_column']: {meta_data['training_data_description']['target_column']}")
-        # df = df[[key_variable, age_col, 'Sex', icv_col] + meta_data['training_data_description']['feature_names']]
-        df = df[[key_variable] + meta_data['training_data_description']['feature_names']]
+    #
+    # 'Sex_M' is in that list because residualization needs a 0/1 male flag and
+    # falls back to deriving one from 'Sex' only when no Sex_M column reaches
+    # it. That fallback is cohort-dependent -- it maps F/M to 0/1 only when
+    # *both* appear in the batch -- so dropping an already-correct Sex_M here
+    # made single-subject and single-sex batches crash with "can't multiply
+    # sequence by non-int of type 'float'" (the unmapped string 'F' reaching
+    # the matmul), and would have scored a 1/2-coded cohort against a confound
+    # that is 1/2 instead of 1/0 without any complaint at all.
+    residualization_covariates = []
+    if spare_type in ['CVM','HT','T2B','SM','BMI']:
+        for col in (age_col, 'Sex', 'Sex_M', icv_col):
+            if col in df.columns and col not in feature_names and col not in residualization_covariates:
+                residualization_covariates.append(col)
+
+    keep = [key_variable]
+    if target_column in df.columns.tolist():
+        keep.append(target_column)
+
+    df = df[keep + residualization_covariates + feature_names]
 
 
     print(f"Preprocessing the input...{df.shape}")
@@ -383,7 +400,11 @@ def infer_svm_model(input_file,
                                        age_col=age_col,
                                        sex_col='Sex',
                                        dlicv_col=icv_col)
-        df = df.drop([age_col,'Sex',icv_col],axis=1)
+        # Drop exactly the covariates added above for residualization's sake.
+        # The hardcoded [age_col,'Sex',icv_col] would throw away ICV for the
+        # CL-type models that need it as a feature, and raise KeyError on any
+        # model whose input never carried a plain 'Sex' column.
+        df = df.drop(columns=residualization_covariates)
         #print(f"Keeping just the residualized features: {df.drop([target_column],axis=1).columns}")
         X, y, _, _ = preprocess_classification_data( 
             df = df.drop([key_variable],axis=1),
