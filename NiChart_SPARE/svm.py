@@ -294,7 +294,9 @@ def load_svm_model(filepath: str):
 def infer_svm_model(input_file, 
                     model_path, 
                     output_file, 
-                    key_variable='MRID'):
+                    key_variable='MRID',
+                    age_col='Age',
+                    icv_col='DL_MUSE_Volume_702'):
     """Make predictions using trained model"""
     
     # Load the main model
@@ -348,12 +350,6 @@ def infer_svm_model(input_file,
         keep.append(target_column)
 
     df = df[keep + residualization_covariates + feature_names]
-
-    if meta_data['training_data_description']['target_column'] in df.columns.tolist():
-        df = df[[key_variable, meta_data['training_data_description']['target_column']] + meta_data['training_data_description']['feature_names']]
-
-    else:
-        df = df[[key_variable] + meta_data['training_data_description']['feature_names']]
 
 
     print(f"Preprocessing the input...{df.shape}")

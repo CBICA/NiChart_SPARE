@@ -286,6 +286,7 @@ df_original['Sex_M'] = sex_flags.astype(int)
 #if 'H_DL_MUSE_Volume_702' in df_original.columns:
 #    df_original['702'] = df_original['H_DL_MUSE_Volume_702']
 
+dlicv_found = any(c in df_original.columns for c in ('DLICV', 'DL_MUSE_Volume_702', 'H_DL_MUSE_Volume_702'))
 if not dlicv_found:
     print("Original dataframe passed to SPARE runall doesn't have DLICV columns.")
 
